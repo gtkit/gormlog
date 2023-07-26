@@ -1,4 +1,4 @@
-module gormlog
+module github.com/gtkit/gormlog
 
 go 1.20
 
