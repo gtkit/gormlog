@@ -21,7 +21,7 @@ type GormZapLogger struct {
 	SqlLog        bool
 }
 
-func ZapLogger(logger *zap.Logger, sqlLog bool) GormZapLogger {
+func L(logger *zap.Logger, sqlLog bool) GormZapLogger {
 	// if logger.Zlog() == nil {
 	// 	logger.NewZap(&logger.Option{
 	// 		FileStdout: true,
