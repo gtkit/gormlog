@@ -10,54 +10,56 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
+	"gorm.io/gorm/logger"
 )
 
-// GormLogger 操作对象，实现 gormlogger.Interface
-type GormZapLogger struct {
+const slowTime = 200
+
+// GormLogger 操作对象，实现 gormlogger.Interface.
+type GormLogger struct {
 	ZapLogger     *zap.Logger
 	SlowThreshold time.Duration
-	SqlLog        bool
+	SQLLog        bool
 }
 
-func L(logger *zap.Logger, sqlLog bool) GormZapLogger {
-	// if logger.Zlog() == nil {
-	// 	logger.NewZap(&logger.Option{
-	// 		FileStdout: true,
-	// 		Division:   "size",
-	// 	})
-	// }
-
-	return GormZapLogger{
-		ZapLogger:     logger,                 // 使用全局的 Logger 对象
-		SlowThreshold: 200 * time.Millisecond, // 慢查询阈值，单位为千分之一秒
-		SqlLog:        sqlLog,
+func L(zl *zap.Logger, sqlLog bool) logger.Interface {
+	return GormLogger{
+		ZapLogger:     zl,                          // 使用全局的 Logger 对象
+		SlowThreshold: slowTime * time.Millisecond, // 慢查询阈值，单位为千分之一秒
+		SQLLog:        sqlLog,
 	}
 }
 
-// LogMode 实现 gormlogger.Interface 的 LogMode 方法
-func (l GormZapLogger) LogMode(level gormlogger.LogLevel) gormlogger.Interface {
-	return GormZapLogger{
+func New(zl *zap.Logger, sqlLog bool) logger.Interface {
+	return GormLogger{
+		ZapLogger:     zl,                          // 使用全局的 Logger 对象
+		SlowThreshold: slowTime * time.Millisecond, // 慢查询阈值，单位为千分之一秒
+		SQLLog:        sqlLog,
+	}
+}
+
+// LogMode 实现 gormlogger.Interface 的 LogMode 方法.
+func (l GormLogger) LogMode(level logger.LogLevel) logger.Interface {
+	return GormLogger{
 		ZapLogger:     l.ZapLogger,
 		SlowThreshold: l.SlowThreshold,
-		SqlLog:        l.SqlLog,
+		SQLLog:        l.SQLLog,
 	}
 }
 
-func (l GormZapLogger) Info(ctx context.Context, s string, i ...interface{}) {
-	l.logger().Sugar().Debugf(s, i...)
+func (l GormLogger) Info(ctx context.Context, s string, i ...interface{}) {
+	l.sugar().Debugf(s, i...)
 }
 
-func (l GormZapLogger) Warn(ctx context.Context, s string, i ...interface{}) {
-	l.logger().Sugar().Warnf(s, i...)
+func (l GormLogger) Warn(ctx context.Context, s string, i ...interface{}) {
+	l.sugar().Warnf(s, i...)
 }
 
-func (l GormZapLogger) Error(ctx context.Context, s string, i ...interface{}) {
-	l.logger().Sugar().Errorf(s, i...)
+func (l GormLogger) Error(ctx context.Context, s string, i ...interface{}) {
+	l.sugar().Errorf(s, i...)
 }
 
-func (l GormZapLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
+func (l GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
 	// 获取运行时间
 	elapsed := time.Since(begin)
 	// 获取 SQL 请求和返回条数
@@ -66,13 +68,14 @@ func (l GormZapLogger) Trace(ctx context.Context, begin time.Time, fc func() (sq
 	// 通用字段
 	logFields := []zap.Field{
 		zap.String("sql", sql),
-		zap.String("time", fmt.Sprintf("%.3fms", float64(elapsed.Nanoseconds())/1e6)),
+		zap.String("time", fmt.Sprintf("%.3fms", float64(elapsed.Milliseconds()))),
 		zap.Int64("rows", rows),
 	}
 	// Gorm 错误
 	if err != nil {
 		// 记录未找到的错误使用 warning 等级
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		// if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, errors.New("record not found")) {
 			l.logger().Warn("Database ErrRecordNotFound", logFields...)
 		} else {
 			// 其他错误使用 error 等级
@@ -87,13 +90,12 @@ func (l GormZapLogger) Trace(ctx context.Context, begin time.Time, fc func() (sq
 	}
 
 	// 记录所有 SQL 请求
-	if l.SqlLog {
+	if l.SQLLog {
 		l.logger().Debug("Database Query", logFields...)
 	}
-
 }
-func (l GormZapLogger) logger() *zap.Logger {
 
+func (l GormLogger) logger() *zap.Logger {
 	// 跳过 gorm 内置的调用
 	var (
 		gormPackage    = filepath.Join("gorm.io", "gorm")
@@ -116,4 +118,8 @@ func (l GormZapLogger) logger() *zap.Logger {
 		}
 	}
 	return l.ZapLogger
+}
+
+func (l GormLogger) sugar() *zap.SugaredLogger {
+	return l.logger().Sugar()
 }
