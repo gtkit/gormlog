@@ -1,13 +1,13 @@
 module github.com/gtkit/gormlog
 
-go 1.20
+go 1.22
 
 require (
-	go.uber.org/zap v1.24.0
-	gorm.io/gorm v1.25.2
+	go.uber.org/zap v1.27.0
+	gorm.io/gorm v1.25.9
 )
 
 require (
-	go.uber.org/atomic v1.7.0 // indirect
-	go.uber.org/multierr v1.6.0 // indirect
+	github.com/stretchr/testify v1.9.0 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
 )

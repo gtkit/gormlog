@@ -22,6 +22,8 @@ type GormLogger struct {
 	SQLLog        bool
 }
 
+var _ logger.Interface = (*GormLogger)(nil)
+
 func L(zl *zap.Logger, sqlLog bool) logger.Interface {
 	return GormLogger{
 		ZapLogger:     zl,                          // 使用全局的 Logger 对象
