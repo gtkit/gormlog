@@ -13,7 +13,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-const slowTime = 200
+const slowTime = 200 * time.Millisecond
 
 // GormLogger 操作对象，实现 gormlogger.Interface.
 type GormLogger struct {
@@ -22,26 +22,31 @@ type GormLogger struct {
 	SQLLog        bool
 }
 
-var _ logger.Interface = (*GormLogger)(nil)
-
-func L(zl *zap.Logger, sqlLog bool) logger.Interface {
-	return GormLogger{
-		ZapLogger:     zl,                          // 使用全局的 Logger 对象
-		SlowThreshold: slowTime * time.Millisecond, // 慢查询阈值，单位为千分之一秒
-		SQLLog:        sqlLog,
-	}
+// 确保 GormLogger 实现了 gormlogger.Interface.
+func _() {
+	var _ logger.Interface = (*GormLogger)(nil)
 }
 
-func New(zl *zap.Logger, sqlLog bool) logger.Interface {
+// New 创建一个 GormLogger 对象.
+// @Param zaplogger zap实例.
+// @Param sqllog 是否打印 sql 日志,默认不打印.
+func New(zaplogger *zap.Logger, sqllog ...bool) logger.Interface {
+	var outSQLLog bool
+	if zaplogger == nil {
+		panic("nil zap logger")
+	}
+	if len(sqllog) > 0 {
+		outSQLLog = sqllog[0]
+	}
 	return GormLogger{
-		ZapLogger:     zl,                          // 使用全局的 Logger 对象
-		SlowThreshold: slowTime * time.Millisecond, // 慢查询阈值，单位为千分之一秒
-		SQLLog:        sqlLog,
+		ZapLogger:     zaplogger, // 使用全局的 Logger 对象
+		SlowThreshold: slowTime,  // 慢查询阈值，单位为毫秒
+		SQLLog:        outSQLLog, // 是否打印 sql 日志, 默认不记录
 	}
 }
 
 // LogMode 实现 gormlogger.Interface 的 LogMode 方法.
-func (l GormLogger) LogMode(level logger.LogLevel) logger.Interface {
+func (l GormLogger) LogMode(_ logger.LogLevel) logger.Interface {
 	return GormLogger{
 		ZapLogger:     l.ZapLogger,
 		SlowThreshold: l.SlowThreshold,
@@ -49,19 +54,19 @@ func (l GormLogger) LogMode(level logger.LogLevel) logger.Interface {
 	}
 }
 
-func (l GormLogger) Info(ctx context.Context, s string, i ...interface{}) {
+func (l GormLogger) Info(_ context.Context, s string, i ...any) {
 	l.sugar().Debugf(s, i...)
 }
 
-func (l GormLogger) Warn(ctx context.Context, s string, i ...interface{}) {
+func (l GormLogger) Warn(_ context.Context, s string, i ...any) {
 	l.sugar().Warnf(s, i...)
 }
 
-func (l GormLogger) Error(ctx context.Context, s string, i ...interface{}) {
+func (l GormLogger) Error(_ context.Context, s string, i ...any) {
 	l.sugar().Errorf(s, i...)
 }
 
-func (l GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
+func (l GormLogger) Trace(_ context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
 	// 获取运行时间
 	elapsed := time.Since(begin)
 	// 获取 SQL 请求和返回条数
