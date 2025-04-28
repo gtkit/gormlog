@@ -1,4 +1,4 @@
-package gormlog
+package zlogger
 
 import (
 	"context"
@@ -9,8 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gtkit/logger"
 	"go.uber.org/zap"
-	"gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 const slowTime = 200 * time.Millisecond
@@ -19,39 +20,38 @@ const slowTime = 200 * time.Millisecond
 type GormLogger struct {
 	ZapLogger     *zap.Logger
 	SlowThreshold time.Duration
-	SQLLog        bool
+	sqlLog        bool
+	ignoreTrace   bool
 }
 
 // 确保 GormLogger 实现了 gormlogger.Interface.
 func _() {
-	var _ logger.Interface = (*GormLogger)(nil)
+	var _ gormlogger.Interface = (*GormLogger)(nil)
 }
 
 // New 创建一个 GormLogger 对象.
 // @Param zaplogger zap实例.
-// @Param sqllog 是否打印 sql 日志,默认不打印.
-func New(zaplogger *zap.Logger, sqllog ...bool) logger.Interface {
-	var outSQLLog bool
-	if zaplogger == nil {
-		panic("nil zap logger")
+// @Param sqlLog 是否打印 sql 日志,默认不打印.
+func New(options ...Option) gormlogger.Interface {
+	l := GormLogger{
+		SlowThreshold: slowTime,
 	}
-	if len(sqllog) > 0 {
-		outSQLLog = sqllog[0]
+	// Apply options
+	for _, option := range options {
+		option(&l)
 	}
-	return GormLogger{
-		ZapLogger:     zaplogger, // 使用全局的 Logger 对象
-		SlowThreshold: slowTime,  // 慢查询阈值，单位为毫秒
-		SQLLog:        outSQLLog, // 是否打印 sql 日志, 默认不记录
+	if l.ZapLogger == nil {
+		logger.NewZap(logger.WithFile(true), logger.WithConsole(true))
+		logger.ZInfo("**** gorm new zap logger ****")
+		l.ZapLogger = logger.Zlog()
 	}
+
+	return l
 }
 
 // LogMode 实现 gormlogger.Interface 的 LogMode 方法.
-func (l GormLogger) LogMode(_ logger.LogLevel) logger.Interface {
-	return GormLogger{
-		ZapLogger:     l.ZapLogger,
-		SlowThreshold: l.SlowThreshold,
-		SQLLog:        l.SQLLog,
-	}
+func (l GormLogger) LogMode(_ gormlogger.LogLevel) gormlogger.Interface {
+	return l
 }
 
 func (l GormLogger) Info(_ context.Context, s string, i ...any) {
@@ -67,6 +67,10 @@ func (l GormLogger) Error(_ context.Context, s string, i ...any) {
 }
 
 func (l GormLogger) Trace(_ context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
+	// 忽略 trace 日志
+	if l.ignoreTrace {
+		return
+	}
 	// 获取运行时间
 	elapsed := time.Since(begin)
 	// 获取 SQL 请求和返回条数
@@ -97,7 +101,7 @@ func (l GormLogger) Trace(_ context.Context, begin time.Time, fc func() (sql str
 	}
 
 	// 记录所有 SQL 请求
-	if l.SQLLog {
+	if l.sqlLog {
 		l.logger().Debug("Database Query", logFields...)
 	}
 }
